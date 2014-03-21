@@ -9,14 +9,16 @@
 #define ROBOTINOLOCALPLANNER_H_
 
 #include <nav_core/base_local_planner.h>
+#include <geometry_msgs/Transform.h>
 #include <geometry_msgs/Twist.h>
 #include <geometry_msgs/Point32.h>
-#include <nav_msgs/Odometry.h>
 #include <std_msgs/Bool.h>
 #include <tf/transform_listener.h>
 #include <costmap_2d/costmap_2d_ros.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
+#include <tf_lookup/tf_stream_client.h>
+#include <tf_lookup/tf_stream_client_impl.h>
 
 namespace robotino_local_planner
 {
@@ -32,8 +34,10 @@ namespace robotino_local_planner
     bool setPlan( const std::vector<geometry_msgs::PoseStamped>& global_plan );
 
   private:
-    void odomCallback(const nav_msgs::OdometryConstPtr& msg);
+    void poseCb(const geometry_msgs::TransformStampedConstPtr& transform);
+
     void publishNextHeading(bool show = true);
+    void displacementToGoal(const geometry_msgs::PoseStamped& goal, double& x, double& y, double& rotation) const;
     bool rotateToStart( geometry_msgs::Twist& cmd_vel );
     bool move( geometry_msgs::Twist& cmd_vel );
     bool rotateToGoal( geometry_msgs::Twist& cmd_vel );
@@ -41,7 +45,8 @@ namespace robotino_local_planner
     double calLinearVel();
     double calRotationVel( double rotation );
     double linearDistance( geometry_msgs::Point p1, geometry_msgs::Point p2 );
-    double mapToMinusPIToPI( double angle );
+    double linearDistance( geometry_msgs::Vector3 t, geometry_msgs::Point p );
+    double mapToMinusPIToPI( double angle ) const;
 
     typedef enum { RotatingToStart, Moving, RotatingToGoal, Finished } State;
 
@@ -49,15 +54,9 @@ namespace robotino_local_planner
 
     std::vector<geometry_msgs::PoseStamped> global_plan_;
 
-    geometry_msgs::PoseStamped base_odom_;
-
-    ros::Subscriber odom_sub_;
-
     ros::Publisher next_heading_pub_;
 
     State state_;
-
-    boost::mutex odom_lock_;
 
     int curr_heading_index_, next_heading_index_;
 
@@ -67,6 +66,13 @@ namespace robotino_local_planner
     double max_rotation_vel_, min_rotation_vel_;
     double yaw_goal_tolerance_, xy_goal_tolerance_;
     int num_window_points_;
+
+    ros::NodeHandle tf_stream_nh_;
+    tf_lookup::TfStreamClient tf_stream_;
+    tf_lookup::TfStreamClient::Handle tf_stream_handle_;
+
+    boost::mutex pose_lock_;
+    geometry_msgs::Transform last_pose_;
 
   };
 }

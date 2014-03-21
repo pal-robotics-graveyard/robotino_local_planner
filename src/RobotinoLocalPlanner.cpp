@@ -8,6 +8,7 @@
 #include "robotino_local_planner/RobotinoLocalPlanner.h"
 #include <pluginlib/class_list_macros.h>
 #include <cmath>
+#include <tf/transform_datatypes.h>
 
 PLUGINLIB_DECLARE_CLASS(robotino_local_planner, RobotinoLocalPlanner, robotino_local_planner::RobotinoLocalPlanner, nav_core::BaseLocalPlanner)
 
@@ -25,13 +26,21 @@ namespace robotino_local_planner
       min_linear_vel_(0.0),
       max_rotation_vel_(0.0),
       min_rotation_vel_(0.0),
-      num_window_points_(10)
+      num_window_points_(10),
+      tf_stream_(tf_stream_nh_),
+      tf_stream_handle_(tf_stream_.addTransform("map", "base_link", boost::bind(&RobotinoLocalPlanner::poseCb, this, _1)))
   {
   }
 
   RobotinoLocalPlanner::~RobotinoLocalPlanner()
   {
     // Empty
+  }
+
+  void RobotinoLocalPlanner::poseCb(const geometry_msgs::TransformStampedConstPtr& transform)
+  {
+    boost::mutex::scoped_lock lock(pose_lock_);
+    last_pose_ = transform->transform;
   }
 
   void RobotinoLocalPlanner::initialize( std::string name, tf::TransformListener* tf, costmap_2d::Costmap2DROS* costmap_ros )
@@ -49,8 +58,6 @@ namespace robotino_local_planner
     private_nh.param("xy_goal_tolerance", xy_goal_tolerance_, 0.10 );
     private_nh.param("num_window_points", num_window_points_, 10 );
 
-    ros::NodeHandle global_node;
-    odom_sub_ = global_node.subscribe<nav_msgs::Odometry>("odom", 1, &RobotinoLocalPlanner::odomCallback, this );
     next_heading_pub_ = private_nh.advertise<visualization_msgs::Marker>("marker", 10);
 
     ROS_INFO("RobotinoLocalPlanner initialized");
@@ -58,6 +65,8 @@ namespace robotino_local_planner
 
   bool RobotinoLocalPlanner::computeVelocityCommands( geometry_msgs::Twist& cmd_vel)
   {
+    boost::mutex::scoped_lock lock(pose_lock_);
+
     // Set all values of cmd_vel to zero
     cmd_vel.linear.x = 0.0;
     cmd_vel.linear.y = 0.0;
@@ -113,15 +122,6 @@ namespace robotino_local_planner
     return true;
   }
 
-  void RobotinoLocalPlanner::odomCallback(const nav_msgs::OdometryConstPtr& msg)
-  {
-    //we assume that the odometry is published in the frame of the base
-    boost::mutex::scoped_lock lock(odom_lock_);
-    base_odom_.header = msg->header;
-    base_odom_.pose.position = msg->pose.pose.position;
-    base_odom_.pose.orientation = msg->pose.pose.orientation;
-  }
-
   void RobotinoLocalPlanner::publishNextHeading(bool show )
   {
     const geometry_msgs::PoseStamped& next_pose = global_plan_[next_heading_index_];
@@ -152,43 +152,24 @@ namespace robotino_local_planner
     next_heading_pub_.publish(marker);
   }
 
+  void RobotinoLocalPlanner::displacementToGoal(const geometry_msgs::PoseStamped& goal, double& x, double& y, double& rotation) const
+  {
+    // Create a vector between the current pose to the next heading pose
+    x = goal.pose.position.x - last_pose_.translation.x;
+    y = goal.pose.position.y - last_pose_.translation.y;
+
+    // Calculate the rotation between the current and the vector created above
+    rotation = (::atan2(y,x) - tf::getYaw(last_pose_.rotation));
+    rotation = mapToMinusPIToPI( rotation );
+  }
+
   bool RobotinoLocalPlanner::rotateToStart( geometry_msgs::Twist& cmd_vel )
   {
-    geometry_msgs::PoseStamped rotate_goal;
-
     ros::Time now = ros::Time::now();
     global_plan_[next_heading_index_].header.stamp = now;
 
-    try
-    {
-      boost::mutex::scoped_lock lock(odom_lock_);
-      tf_->waitForTransform( base_odom_.header.frame_id, global_plan_[next_heading_index_].header.frame_id, now, ros::Duration( TRANSFORM_TIMEOUT ) );
-      tf_->transformPose( base_odom_.header.frame_id, global_plan_[next_heading_index_], rotate_goal );
-    }
-    catch(tf::LookupException& ex)
-    {
-      ROS_ERROR("Lookup Error: %s\n", ex.what());
-      return false;
-    }
-    catch(tf::ConnectivityException& ex)
-    {
-      ROS_ERROR("Connectivity Error: %s\n", ex.what());
-      return false;
-    }
-    catch(tf::ExtrapolationException& ex)
-    {
-      ROS_ERROR("Extrapolation Error: %s\n", ex.what());
-      return false;
-    }
-
-    // Create a vector between the current odom pose to the next heading pose
-    double x = rotate_goal.pose.position.x - base_odom_.pose.position.x;
-    double y = rotate_goal.pose.position.y - base_odom_.pose.position.y;
-
-    // Calculate the rotation between the current odom and the vector created above
-    double rotation = (::atan2(y,x) - tf::getYaw(base_odom_.pose.orientation ) );
-
-    rotation = mapToMinusPIToPI( rotation );
+    double x, y, rotation;
+    displacementToGoal(global_plan_[next_heading_index_], x, y, rotation);
 
     if( fabs( rotation ) < yaw_goal_tolerance_ )
     {
@@ -205,40 +186,11 @@ namespace robotino_local_planner
   {
     publishNextHeading();
 
-    geometry_msgs::PoseStamped move_goal;
     ros::Time now = ros::Time::now();
     global_plan_[next_heading_index_].header.stamp = now;
 
-    try
-    {
-      boost::mutex::scoped_lock lock(odom_lock_);
-      tf_->waitForTransform( base_odom_.header.frame_id, global_plan_[next_heading_index_].header.frame_id, now, ros::Duration( TRANSFORM_TIMEOUT ) );
-      tf_->transformPose( base_odom_.header.frame_id, global_plan_[next_heading_index_], move_goal );
-    }
-    catch(tf::LookupException& ex)
-    {
-      ROS_ERROR("Lookup Error: %s\n", ex.what());
-      return false;
-    }
-    catch(tf::ConnectivityException& ex)
-    {
-      ROS_ERROR("Connectivity Error: %s\n", ex.what());
-      return false;
-    }
-    catch(tf::ExtrapolationException& ex)
-    {
-      ROS_ERROR("Extrapolation Error: %s\n", ex.what());
-      return false;
-    }
-
-    // Create a vector between the current odom pose to the next heading pose
-    double x = move_goal.pose.position.x - base_odom_.pose.position.x;
-    double y = move_goal.pose.position.y - base_odom_.pose.position.y;
-
-    // Calculate the rotation between the current odom and the vector created above
-    double rotation = (::atan2(y,x) - tf::getYaw(base_odom_.pose.orientation ) );
-
-    rotation = mapToMinusPIToPI( rotation );
+    double x, y, rotation;
+    displacementToGoal(global_plan_[next_heading_index_], x, y, rotation);
 
     cmd_vel.angular.z = calRotationVel( rotation );
 
@@ -251,7 +203,7 @@ namespace robotino_local_planner
     cmd_vel.linear.x = calLinearVel();
 
     // The distance from the robot's current pose to the next heading pose
-    double distance_to_next_heading = linearDistance(base_odom_.pose.position, move_goal.pose.position );
+    double distance_to_next_heading = linearDistance(last_pose_.translation, global_plan_[next_heading_index_].pose.position);
 
     // We are approaching the goal position, slow down
     if( next_heading_index_ == (int) global_plan_.size()-1)
@@ -270,35 +222,11 @@ namespace robotino_local_planner
 
   bool RobotinoLocalPlanner::rotateToGoal( geometry_msgs::Twist& cmd_vel )
   {
-    geometry_msgs::PoseStamped rotate_goal;
-
     ros::Time now = ros::Time::now();
     global_plan_[next_heading_index_].header.stamp = now;
 
-    try
-    {
-      boost::mutex::scoped_lock lock(odom_lock_);
-      tf_->waitForTransform( base_odom_.header.frame_id, global_plan_[next_heading_index_].header.frame_id, now, ros::Duration( TRANSFORM_TIMEOUT ) );
-      tf_->transformPose( base_odom_.header.frame_id, global_plan_[next_heading_index_], rotate_goal );
-    }
-    catch(tf::LookupException& ex)
-    {
-      ROS_ERROR("Lookup Error: %s\n", ex.what());
-      return false;
-    }
-    catch(tf::ConnectivityException& ex)
-    {
-      ROS_ERROR("Connectivity Error: %s\n", ex.what());
-      return false;
-    }
-    catch(tf::ExtrapolationException& ex)
-    {
-      ROS_ERROR("Extrapolation Error: %s\n", ex.what());
-      return false;
-    }
-
-    double rotation = tf::getYaw( rotate_goal.pose.orientation ) -
-        tf::getYaw( base_odom_.pose.orientation );
+    double rotation = tf::getYaw( global_plan_[next_heading_index_].pose.orientation ) -
+      tf::getYaw(last_pose_.rotation);
 
     if( fabs( rotation ) < yaw_goal_tolerance_ )
     {
@@ -318,32 +246,10 @@ namespace robotino_local_planner
 
     for( unsigned int i = curr_heading_index_; i < global_plan_.size() - 1; ++i )
     {
-      boost::mutex::scoped_lock lock(odom_lock_);
       ros::Time now = ros::Time::now();
       global_plan_[i].header.stamp = now;
 
-      try
-      {
-        tf_->waitForTransform( base_odom_.header.frame_id, global_plan_[i].header.frame_id, now, ros::Duration( TRANSFORM_TIMEOUT ) );
-        tf_->transformPose( base_odom_.header.frame_id, global_plan_[i], next_heading_pose );
-      }
-      catch(tf::LookupException& ex)
-      {
-        ROS_ERROR("Lookup Error: %s\n", ex.what());
-        return;
-      }
-      catch(tf::ConnectivityException& ex)
-      {
-        ROS_ERROR("Connectivity Error: %s\n", ex.what());
-        return;
-      }
-      catch(tf::ExtrapolationException& ex)
-      {
-        ROS_ERROR("Extrapolation Error: %s\n", ex.what());
-        return;
-      }
-
-      double dist = linearDistance( base_odom_.pose.position,
+      double dist = linearDistance( last_pose_.translation,
           next_heading_pose.pose.position );
 
       if( dist > heading_lookahead_)
@@ -423,7 +329,12 @@ namespace robotino_local_planner
     return sqrt( pow( p2.x - p1.x, 2) + pow( p2.y - p1.y, 2)  );
   }
 
-  double RobotinoLocalPlanner::mapToMinusPIToPI( double angle )
+  double RobotinoLocalPlanner::linearDistance( geometry_msgs::Vector3 t, geometry_msgs::Point p )
+  {
+    return sqrt( pow( t.x - p.x, 2) + pow( t.y - p.y, 2)  );
+  }
+
+  double RobotinoLocalPlanner::mapToMinusPIToPI( double angle ) const
   {
     double angle_overflow = static_cast<double>( static_cast<int>(angle / PI ) );
 

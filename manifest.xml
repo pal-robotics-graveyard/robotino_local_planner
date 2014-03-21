@@ -11,6 +11,7 @@
   <depend package="costmap_2d"/>
   <depend package="tf"/>
   <depend package="pluginlib"/>
+  <depend package="tf_lookup"/>
 
   <export>
     <nav_core plugin="${prefix}/blp_plugin.xml"/>
