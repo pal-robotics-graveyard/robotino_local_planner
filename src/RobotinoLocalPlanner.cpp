@@ -324,12 +324,12 @@ namespace robotino_local_planner
     return vel;
   }
 
-  double RobotinoLocalPlanner::linearDistance( geometry_msgs::Point p1, geometry_msgs::Point p2 )
+  double RobotinoLocalPlanner::linearDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2 )
   {
     return hypot(p2.x - p1.x, p2.y - p1.y);
   }
 
-  double RobotinoLocalPlanner::linearDistance( geometry_msgs::Vector3 t, geometry_msgs::Point p )
+  double RobotinoLocalPlanner::linearDistance(const geometry_msgs::Vector3& t, const geometry_msgs::Point& p )
   {
     return hypot(t.x - p.x, t.y - p.y);
   }

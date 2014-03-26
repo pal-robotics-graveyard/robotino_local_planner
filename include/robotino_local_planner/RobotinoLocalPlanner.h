@@ -44,8 +44,8 @@ namespace robotino_local_planner
     void computeNextHeadingIndex();
     double calLinearVel();
     double calRotationVel( double rotation );
-    double linearDistance( geometry_msgs::Point p1, geometry_msgs::Point p2 );
-    double linearDistance( geometry_msgs::Vector3 t, geometry_msgs::Point p );
+    double linearDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2 );
+    double linearDistance(const geometry_msgs::Vector3& t, const geometry_msgs::Point& p );
 
     typedef enum { RotatingToStart, Moving, RotatingToGoal, Finished } State;
 
