@@ -82,6 +82,7 @@ namespace robotino_local_planner
 
     // We need to compute the next heading point from the global plan
     computeNextHeadingIndex();
+    publishNextHeading();
 
     switch(state_)
     {
@@ -184,8 +185,6 @@ namespace robotino_local_planner
 
   bool RobotinoLocalPlanner::move( geometry_msgs::Twist& cmd_vel )
   {
-    publishNextHeading();
-
     ros::Time now = ros::Time::now();
     global_plan_[next_heading_index_].header.stamp = now;
 
