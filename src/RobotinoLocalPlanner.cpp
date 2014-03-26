@@ -202,14 +202,13 @@ namespace robotino_local_planner
 
     cmd_vel.linear.x = calLinearVel();
 
-    // The distance from the robot's current pose to the next heading pose
-    double distance_to_next_heading = linearDistance(last_pose_.translation, global_plan_[next_heading_index_].pose.position);
-
     // We are approaching the goal position, slow down
     if( next_heading_index_ == (int) global_plan_.size()-1)
     {
+      const double distance_to_next_heading = linearDistance(last_pose_.translation, global_plan_[next_heading_index_].pose.position);
+
       // Reached the goal, now we can stop and rotate the robot to the goal position
-      if( distance_to_next_heading < xy_goal_tolerance_ )
+      if (distance_to_next_heading < xy_goal_tolerance_)
       {
         cmd_vel.linear.x = 0.0;
         cmd_vel.angular.z = 0.0;
@@ -217,6 +216,7 @@ namespace robotino_local_planner
         return true;
       }
     }
+
     return true;
   }
 
@@ -271,11 +271,15 @@ namespace robotino_local_planner
   {
     double vel = 0.0;
 
-    if( next_heading_index_ < num_window_points_)
+    unsigned int beg_index;
+    if (next_heading_index_ < num_window_points_)
     {
-      return vel;
+      beg_index = 0;
     }
-    unsigned int beg_index = next_heading_index_ - num_window_points_;
+    else
+    {
+      beg_index = next_heading_index_ - num_window_points_;
+    }
 
     double straight_dist = linearDistance(global_plan_[beg_index].pose.position,
         global_plan_[next_heading_index_].pose.position);
@@ -288,7 +292,7 @@ namespace robotino_local_planner
               global_plan_[i + 1].pose.position);
     }
 
-    double diff = path_dist - straight_dist;
+    const double diff = std::max(0.001, path_dist - straight_dist);
 
     vel = 0.001 * ( 1 / diff );
 
