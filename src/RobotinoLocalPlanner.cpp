@@ -109,8 +109,6 @@ namespace robotino_local_planner
 
   bool RobotinoLocalPlanner::setPlan( const std::vector<geometry_msgs::PoseStamped>& global_plan )
   {
-    global_plan_.clear();
-
     // Make our copy of the global plan
     global_plan_ = global_plan;
 
@@ -175,6 +173,7 @@ namespace robotino_local_planner
     if( fabs( rotation ) < yaw_goal_tolerance_ )
     {
       state_ = Moving;
+      cmd_vel.angular.z = 0;
       return true;
     }
 
@@ -191,12 +190,14 @@ namespace robotino_local_planner
     double x, y, rotation;
     displacementToGoal(global_plan_[next_heading_index_], x, y, rotation);
 
-    cmd_vel.angular.z = calRotationVel( rotation );
-
-    if( fabs( rotation ) < yaw_goal_tolerance_ )
+    if (fabs(rotation) < yaw_goal_tolerance_)
     {
       // The robot has rotated to its next heading pose
       cmd_vel.angular.z = 0.0;
+    }
+    else
+    {
+      cmd_vel.angular.z = calRotationVel(rotation);
     }
 
     cmd_vel.linear.x = calLinearVel();
