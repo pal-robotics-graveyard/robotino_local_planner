@@ -9,6 +9,7 @@
 #include <pluginlib/class_list_macros.h>
 #include <cmath>
 #include <tf/transform_datatypes.h>
+#include <angles/angles.h>
 
 PLUGINLIB_DECLARE_CLASS(robotino_local_planner, RobotinoLocalPlanner, robotino_local_planner::RobotinoLocalPlanner, nav_core::BaseLocalPlanner)
 
@@ -159,8 +160,7 @@ namespace robotino_local_planner
     y = goal.pose.position.y - last_pose_.translation.y;
 
     // Calculate the rotation between the current and the vector created above
-    rotation = (::atan2(y,x) - tf::getYaw(last_pose_.rotation));
-    rotation = mapToMinusPIToPI( rotation );
+    rotation = angles::shortest_angular_distance(tf::getYaw(last_pose_.rotation), std::atan2(y, x));
   }
 
   bool RobotinoLocalPlanner::rotateToStart( geometry_msgs::Twist& cmd_vel )
@@ -249,6 +249,8 @@ namespace robotino_local_planner
       ros::Time now = ros::Time::now();
       global_plan_[i].header.stamp = now;
 
+      next_heading_pose = global_plan_[i];
+
       double dist = linearDistance( last_pose_.translation,
           next_heading_pose.pose.position );
 
@@ -334,20 +336,4 @@ namespace robotino_local_planner
     return sqrt( pow( t.x - p.x, 2) + pow( t.y - p.y, 2)  );
   }
 
-  double RobotinoLocalPlanner::mapToMinusPIToPI( double angle ) const
-  {
-    double angle_overflow = static_cast<double>( static_cast<int>(angle / PI ) );
-
-    if( angle_overflow > 0.0 )
-    {
-      angle_overflow = ceil( angle_overflow / 2.0 );
-    }
-    else
-    {
-      angle_overflow = floor( angle_overflow / 2.0 );
-    }
-
-    angle -= 2 * PI * angle_overflow;
-    return angle;
-  }
 }

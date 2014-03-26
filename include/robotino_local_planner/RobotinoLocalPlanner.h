@@ -46,7 +46,6 @@ namespace robotino_local_planner
     double calRotationVel( double rotation );
     double linearDistance( geometry_msgs::Point p1, geometry_msgs::Point p2 );
     double linearDistance( geometry_msgs::Vector3 t, geometry_msgs::Point p );
-    double mapToMinusPIToPI( double angle ) const;
 
     typedef enum { RotatingToStart, Moving, RotatingToGoal, Finished } State;
 
