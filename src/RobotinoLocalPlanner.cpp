@@ -305,18 +305,13 @@ namespace robotino_local_planner
   {
     double vel = 0.0;
 
-    int sign = 1;
-
-    if( rotation < 0.0 )
-      sign = -1;
-
     if( fabs(rotation) > max_rotation_vel_)
     {
-      vel = sign * max_rotation_vel_;
+      vel = std::copysign(max_rotation_vel_, rotation);
     }
     else if ( fabs(rotation) < min_rotation_vel_ )
     {
-      vel = sign * min_rotation_vel_;
+      vel = std::copysign(min_rotation_vel_, rotation);
     }
     else
     {
