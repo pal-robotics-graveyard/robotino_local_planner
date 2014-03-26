@@ -328,12 +328,12 @@ namespace robotino_local_planner
 
   double RobotinoLocalPlanner::linearDistance( geometry_msgs::Point p1, geometry_msgs::Point p2 )
   {
-    return sqrt( pow( p2.x - p1.x, 2) + pow( p2.y - p1.y, 2)  );
+    return hypot(p2.x - p1.x, p2.y - p1.y);
   }
 
   double RobotinoLocalPlanner::linearDistance( geometry_msgs::Vector3 t, geometry_msgs::Point p )
   {
-    return sqrt( pow( t.x - p.x, 2) + pow( t.y - p.y, 2)  );
+    return hypot(t.x - p.x, t.y - p.y);
   }
 
 }
